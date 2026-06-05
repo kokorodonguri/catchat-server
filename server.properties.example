@@ -18,7 +18,7 @@ server-description=A self-hosted catChat community server
 public-url=http://localhost:8100
 
 # Hub URL used only for the startup add-server link.
-hub-url=https://catchat.dongurihub.com
+hub-url=https://chat.dongurihub.com
 
 # Persistent paths inside the Docker container.
 database-path=/app/data/server.db
@@ -28,6 +28,9 @@ upload-dir=/app/uploads
 default-channel-name=general
 
 # Attachments.
+# Uploads are streamed to disk in chunks. Files over the configured limit are
+# removed and rejected with HTTP 413. SVG uploads are rejected even when image/*
+# is allowed.
 max-attachment-size-mb=50
 max-attachments-per-message=5
 allowed-file-types=image/*,video/*,audio/*,application/pdf,text/plain,application/zip
@@ -54,7 +57,7 @@ default-invite-expires-hours=0
 allow-users-create-invites=false
 
 # Access and CORS.
-allowed-origins=https://catchat.dongurihub.com
+allowed-origins=https://chat.dongurihub.com
 require-hub-proxy=true
 allow-direct-browser-access=false
 

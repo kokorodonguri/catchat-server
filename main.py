@@ -158,6 +158,7 @@ else:
 MAX_ATTACHMENTS_PER_MESSAGE = positive_int_setting("MAX_ATTACHMENTS_PER_MESSAGE", "max-attachments-per-message", 5)
 MAX_MESSAGE_LENGTH = positive_int_setting("MAX_MESSAGE_LENGTH", "max-message-length", 4000)
 MAX_MESSAGE_HISTORY = positive_int_setting("MAX_MESSAGE_HISTORY", "max-message-history", 100)
+UPLOAD_CHUNK_SIZE = 1024 * 1024
 EMPTY_MESSAGE_CLEANUP_SECONDS = 60 * 60
 ALLOWED_FILE_TYPES = [
     value.strip().lower()
@@ -441,14 +442,31 @@ EXECUTABLE_EXTENSIONS = {
     ".sh",
     ".vbs",
 }
+SVG_CONTENT_TYPES = {"image/svg+xml", "image/svg"}
 
 
 def validate_attachment_file(filename: str, content_type: str) -> None:
     if not ALLOW_EXECUTABLE_FILES and Path(filename).suffix.lower() in EXECUTABLE_EXTENSIONS:
         raise HTTPException(status_code=415, detail="Executable file uploads are disabled")
-    normalized_type = content_type.lower()
+    normalized_type = content_type.split(";", 1)[0].strip().lower()
+    if Path(filename).suffix.lower() == ".svg" or normalized_type in SVG_CONTENT_TYPES:
+        raise HTTPException(status_code=415, detail="SVG uploads are disabled")
     if ALLOWED_FILE_TYPES and not any(fnmatch.fnmatch(normalized_type, pattern) for pattern in ALLOWED_FILE_TYPES):
         raise HTTPException(status_code=415, detail="File type is not allowed by this server")
+
+
+async def write_upload_file(file: UploadFile, target: Path) -> int:
+    size = 0
+    with target.open("wb") as output:
+        while True:
+            chunk = await file.read(UPLOAD_CHUNK_SIZE)
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > MAX_ATTACHMENT_SIZE:
+                raise HTTPException(status_code=413, detail=f"Files must be {MAX_ATTACHMENT_SIZE} bytes or smaller")
+            await asyncio.to_thread(output.write, chunk)
+    return size
 
 
 def connect() -> sqlite3.Connection:
@@ -624,6 +642,18 @@ def has_server_permission(db: sqlite3.Connection, member_id: str, permission: st
     }
 
 
+def require_hub_user_id(x_catchat_hub_user_id: Annotated[str | None, Header()] = None) -> str:
+    member_id = (x_catchat_hub_user_id or "").strip()
+    if not member_id:
+        raise HTTPException(status_code=403, detail="X-Catchat-Hub-User-Id header is required")
+    return member_id
+
+
+def require_member_permission(db: sqlite3.Connection, member_id: str, permission: str) -> None:
+    if not has_server_permission(db, member_id, permission):
+        raise HTTPException(status_code=403, detail=f"Permission required: {permission}")
+
+
 def require_secret(authorization: Annotated[str | None, Header()] = None) -> None:
     prefix = "Bearer "
     if not authorization or not authorization.startswith(prefix):
@@ -753,7 +783,7 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-Catchat-Hub-User-Id"],
 )
 
 
@@ -851,11 +881,12 @@ def get_channels() -> list[Channel]:
 
 
 @app.post("/api/channels", response_model=Channel, status_code=201, dependencies=[Depends(require_secret)])
-def create_channel(data: ChannelCreate) -> Channel:
+def create_channel(data: ChannelCreate, hub_user_id: Annotated[str, Depends(require_hub_user_id)]) -> Channel:
     if not ALLOW_CHANNEL_CREATE:
         raise HTTPException(status_code=403, detail="Channel creation is disabled on this server")
     try:
         with connect() as db:
+            require_member_permission(db, hub_user_id, ServerPermission.MANAGE_CHANNELS)
             channel_count = db.execute("SELECT COUNT(*) FROM channels").fetchone()[0]
             current_max_channels = get_current_max_channels(db)
             if current_max_channels > 0 and channel_count >= current_max_channels:
@@ -918,13 +949,19 @@ async def create_message(channel_id: int, data: MessageCreate) -> Message:
 
 
 @app.patch("/api/messages/{message_id}", response_model=Message, dependencies=[Depends(require_secret)])
-async def update_message(message_id: int, data: MessageUpdate) -> Message:
+async def update_message(
+    message_id: int,
+    data: MessageUpdate,
+    hub_user_id: Annotated[str, Depends(require_hub_user_id)],
+) -> Message:
     if not ALLOW_MESSAGE_EDIT:
         raise HTTPException(status_code=403, detail="Message editing is disabled on this server")
     with connect() as db:
         existing = fetch_message(db, message_id)
         if existing.deleted_at is not None:
             raise HTTPException(status_code=409, detail="Deleted messages cannot be edited")
+        if existing.author_id != hub_user_id:
+            require_member_permission(db, hub_user_id, ServerPermission.MANAGE_MESSAGES)
         db.execute(
             "UPDATE messages SET content = ?, updated_at = ? WHERE id = ?",
             (data.content, int(time.time()), message_id),
@@ -935,11 +972,16 @@ async def update_message(message_id: int, data: MessageUpdate) -> Message:
 
 
 @app.delete("/api/messages/{message_id}", response_model=Message, dependencies=[Depends(require_secret)])
-async def delete_message(message_id: int) -> Message:
+async def delete_message(
+    message_id: int,
+    hub_user_id: Annotated[str, Depends(require_hub_user_id)],
+) -> Message:
     if not ALLOW_MESSAGE_DELETE:
         raise HTTPException(status_code=403, detail="Message deletion is disabled on this server")
     with connect() as db:
         existing = fetch_message(db, message_id)
+        if existing.author_id != hub_user_id:
+            require_member_permission(db, hub_user_id, ServerPermission.MANAGE_MESSAGES)
         if existing.deleted_at is None:
             db.execute(
                 "UPDATE messages SET content = '', deleted_at = ? WHERE id = ?",
@@ -972,18 +1014,15 @@ async def add_attachment(
         filename = Path(file.filename or "attachment").name[:255] or "attachment"
         content_type = file.content_type or "application/octet-stream"
         validate_attachment_file(filename, content_type)
-        contents = await file.read(MAX_ATTACHMENT_SIZE + 1)
-        if len(contents) > MAX_ATTACHMENT_SIZE:
-            raise HTTPException(status_code=413, detail=f"Files must be {MAX_ATTACHMENT_SIZE} bytes or smaller")
         stored_name = uuid.uuid4().hex
         target = UPLOAD_DIR / stored_name
-        await asyncio.to_thread(target.write_bytes, contents)
+        size = await write_upload_file(file, target)
         with connect() as db:
             db.execute(
                 """INSERT INTO attachments
                    (message_id, stored_name, filename, content_type, size, created_at)
                    VALUES (?, ?, ?, ?, ?, ?)""",
-                (message_id, stored_name, filename, content_type, len(contents), int(time.time())),
+                (message_id, stored_name, filename, content_type, size, int(time.time())),
             )
             message = fetch_message(db, message_id)
     except Exception:
@@ -1168,7 +1207,7 @@ def on_startup():
                     with urllib.request.urlopen(req, timeout=10) as res:
                         result = json.loads(res.read().decode("utf-8"))
                         print()
-                        print(f"✅ Successfully registered to Hub!")
+                        print("✅ Successfully registered to Hub!")
                         print(f"👉 Common Invite Link: {result.get('join_url')}")
                 except Exception as e:
                     print()
@@ -1196,6 +1235,21 @@ def _validate_invite(db: sqlite3.Connection, code: str) -> sqlite3.Row:
         member_count = db.execute("SELECT COUNT(*) FROM members").fetchone()[0]
         if member_count >= MAX_MEMBERS:
             raise HTTPException(status_code=403, detail="Maximum member count reached")
+    return row
+
+
+def _consume_invite(db: sqlite3.Connection, code: str) -> sqlite3.Row:
+    """Validate an invite and atomically consume one use."""
+    row = _validate_invite(db, code)
+    cursor = db.execute(
+        """UPDATE invites
+           SET use_count = use_count + 1
+           WHERE code = ?
+             AND (max_uses IS NULL OR use_count < max_uses)""",
+        (code,),
+    )
+    if cursor.rowcount != 1:
+        raise HTTPException(status_code=400, detail="Invite code maximum uses reached")
     return row
 
 
@@ -1278,8 +1332,7 @@ def check_invite_code(code: str) -> InviteCheckResponse:
 def join_guild_server(data: JoinRequest) -> JoinResponse:
     """Public endpoint: validate invite and return public server info. Never returns secret."""
     with connect() as db:
-        _validate_invite(db, data.code)
-        db.execute("UPDATE invites SET use_count = use_count + 1 WHERE code = ?", (data.code,))
+        _consume_invite(db, data.code)
         return _public_join_response(db)
 
 
@@ -1298,8 +1351,7 @@ def join_guild_server(data: JoinRequest) -> JoinResponse:
 def register_guild_server(data: JoinRequest) -> ServerRegistrationResponse:
     """Hub backend only: register this server and receive the secret for proxy auth."""
     with connect() as db:
-        _validate_invite(db, data.code)
-        db.execute("UPDATE invites SET use_count = use_count + 1 WHERE code = ?", (data.code,))
+        _consume_invite(db, data.code)
         public_response = _public_join_response(db)
 
     return ServerRegistrationResponse(**public_response.model_dump(), secret=SERVER_SECRET)
@@ -1326,9 +1378,13 @@ webhook_request_history: dict[str, list[float]] = {}
     status_code=201,
     dependencies=[Depends(check_webhooks_enabled), Depends(require_secret)],
 )
-def create_webhook(data: WebhookCreate) -> WebhookCreateResponse:
+def create_webhook(
+    data: WebhookCreate,
+    hub_user_id: Annotated[str, Depends(require_hub_user_id)],
+) -> WebhookCreateResponse:
     now = int(time.time())
     with connect() as db:
+        require_member_permission(db, hub_user_id, ServerPermission.MANAGE_WEBHOOKS)
         channel_or_404(db, data.channel_id)
         count = db.execute("SELECT COUNT(*) FROM incoming_webhooks WHERE enabled = 1").fetchone()[0]
         if count >= MAX_WEBHOOKS:
@@ -1388,9 +1444,13 @@ def get_webhooks() -> list[WebhookListItem]:
     "/api/webhooks/{webhook_id}",
     dependencies=[Depends(check_webhooks_enabled), Depends(require_secret)],
 )
-def delete_webhook(webhook_id: int) -> dict[str, bool]:
+def delete_webhook(
+    webhook_id: int,
+    hub_user_id: Annotated[str, Depends(require_hub_user_id)],
+) -> dict[str, bool]:
     """Logically disable a webhook (sets enabled=0). Does not physically delete it."""
     with connect() as db:
+        require_member_permission(db, hub_user_id, ServerPermission.MANAGE_WEBHOOKS)
         row = db.execute("SELECT * FROM incoming_webhooks WHERE id = ?", (webhook_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Webhook not found")
@@ -1406,16 +1466,6 @@ def delete_webhook(webhook_id: int) -> dict[str, bool]:
 async def execute_webhook(webhook_id: int, token: str, data: WebhookPayload) -> Message:
     now = int(time.time())
     
-    # Rate limiting checking
-    history = [t for t in webhook_request_history.get(token, []) if now - t < 60]
-    webhook_request_history[token] = history
-    if len(history) >= WEBHOOK_RATE_LIMIT_PER_MINUTE:
-        raise HTTPException(
-            status_code=429,
-            detail="操作が多すぎます。時間をおいて再試行してください。",
-        )
-    webhook_request_history[token].append(now)
-    
     with connect() as db:
         webhook = db.execute("SELECT * FROM incoming_webhooks WHERE id = ?", (webhook_id,)).fetchone()
         if not webhook:
@@ -1426,6 +1476,16 @@ async def execute_webhook(webhook_id: int, token: str, data: WebhookPayload) -> 
         
         if webhook["enabled"] != 1:
             raise HTTPException(status_code=403, detail="Webhook is disabled")
+
+        rate_limit_key = str(webhook_id)
+        history = [t for t in webhook_request_history.get(rate_limit_key, []) if now - t < 60]
+        webhook_request_history[rate_limit_key] = history
+        if len(history) >= WEBHOOK_RATE_LIMIT_PER_MINUTE:
+            raise HTTPException(
+                status_code=429,
+                detail="操作が多すぎます。時間をおいて再試行してください。",
+            )
+        webhook_request_history[rate_limit_key].append(now)
             
         channel_id = webhook["channel_id"]
         channel_or_404(db, channel_id)

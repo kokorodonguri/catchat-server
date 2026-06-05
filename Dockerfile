@@ -2,6 +2,8 @@
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1
+ARG CATCHAT_UID=1000
+ARG CATCHAT_GID=1000
 
 WORKDIR /app
 
@@ -19,8 +21,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY main.py .
 COPY server.properties.example ./server.properties
 
-# Create directories for persistent mounts.
-RUN mkdir -p /app/data /app/uploads
+# Create a dedicated runtime user and writable persistent mount points.
+RUN groupadd --gid "${CATCHAT_GID}" catchat \
+    && useradd --uid "${CATCHAT_UID}" --gid catchat --home-dir /app --shell /usr/sbin/nologin catchat \
+    && mkdir -p /app/data /app/uploads \
+    && chown -R catchat:catchat /app
+
+USER catchat
 
 # Expose the application port
 EXPOSE 8100

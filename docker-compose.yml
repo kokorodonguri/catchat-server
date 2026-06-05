@@ -3,7 +3,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: catchat-server
     env_file:
       - .env
     ports:

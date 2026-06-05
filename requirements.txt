@@ -1,5 +1,7 @@
-fastapi
-uvicorn[standard]
-pydantic
-python-dotenv
-python-multipart
+# Runtime dependencies are pinned for reproducible self-hosted Docker builds.
+# To update: test locally, then bump these versions together.
+fastapi==0.136.3
+uvicorn[standard]==0.49.0
+pydantic==2.13.4
+python-dotenv==1.2.2
+python-multipart==0.0.32

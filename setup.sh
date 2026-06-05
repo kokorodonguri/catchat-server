@@ -439,7 +439,7 @@ print_invite_from_env() {
   registration_token="$(read_env_value CATCHAT_SERVER_REGISTRATION_TOKEN)"
 
   [[ -n "${public_url}" ]] || fail "CATCHAT_SERVER_PUBLIC_URL が .env にありません。"
-  [[ -n "${hub_url}" ]] || hub_url="https://catchat.dongurihub.com"
+  [[ -n "${hub_url}" ]] || hub_url="https://chat.dongurihub.com"
   [[ -n "${invite_code}" ]] || fail "CATCHAT_INVITE_CODE が .env にありません。"
   [[ -n "${port}" ]] || port="8100"
   [[ -n "${server_name}" ]] || server_name="My catChat Server"
@@ -522,7 +522,7 @@ if [[ "${NON_INTERACTIVE}" == true ]]; then
   registration_token="${existing_registration_token}"
 else
   server_name="$(prompt "サーバー名" "${existing_server_name:-My catChat Server}")"
-  hub_url="$(prompt "catChat Hub URL" "${existing_hub_url:-https://catchat.dongurihub.com}")"
+  hub_url="$(prompt "catChat Hub URL" "${existing_hub_url:-https://chat.dongurihub.com}")"
   port="$(prompt "公開するポート" "${existing_port:-8100}")"
   if [[ -n "${existing_registration_token}" ]]; then
     registration_token="$(prompt "Hub登録トークン (Enterで既存値を保持)" "${existing_registration_token}")"

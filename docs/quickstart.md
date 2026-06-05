@@ -53,12 +53,12 @@ setup の最後に表示される招待リンクを Hub に追加、またはブ
 
 **推奨 (共通招待リンク):**
 ```text
-https://catchat.dongurihub.com/join/abc123
+https://chat.dongurihub.com/join/abc123
 ```
 
 **互換用 (レガシー招待リンク):**
 ```text
-https://catchat.dongurihub.com/add-server?invite=...
+https://chat.dongurihub.com/add-server?invite=...
 ```
 
 これらの招待リンクには `CATCHAT_SERVER_SECRET` は含まれません。
@@ -73,3 +73,10 @@ curl http://127.0.0.1:8100/api/server/health
 docker compose restart
 docker compose down
 ```
+
+## 6. Security defaults
+
+- 既定の Hub URL は `https://chat.dongurihub.com` です。
+- Docker コンテナは root ではなく `catchat` ユーザーで uvicorn を実行します。
+- Hub proxy は `Authorization: Bearer CATCHAT_SERVER_SECRET` を送ります。チャンネル作成、メッセージ編集/削除、webhook 管理では追加で `X-Catchat-Hub-User-Id` が必要です。
+- 添付ファイルは chunk 保存され、上限超過時は途中ファイルを削除します。実行ファイル拡張子と SVG は拒否されます。
