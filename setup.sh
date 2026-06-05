@@ -102,6 +102,30 @@ validate_public_url() {
   [[ "${value}" =~ ^https?://[^[:space:]]+$ ]]
 }
 
+validate_external_public_url() {
+  local value="$1"
+  validate_public_url "${value}" && ! is_localhost_url "${value}"
+}
+
+prompt_external_public_url() {
+  local label="$1"
+  local value=""
+  while true; do
+    value="$(prompt_required "${label}")"
+    if ! validate_public_url "${value}"; then
+      echo "http:// または https:// で始まる URL を入力してください。" >&2
+      continue
+    fi
+    if is_localhost_url "${value}"; then
+      echo "Public URL に localhost / 127.0.0.1 / 0.0.0.0 は使えません。" >&2
+      echo "Cloudflare Tunnel、Nginx + HTTPS、Tailscale、または外部から到達できる URL を指定してください。" >&2
+      continue
+    fi
+    echo "${value%/}"
+    return 0
+  done
+}
+
 confirm_yes_no() {
   local question="$1"
   local default="${2:-N}"
@@ -144,7 +168,7 @@ read_env_value() {
 
 is_placeholder_value() {
   local value="${1,,}"
-  [[ -z "${value}" || "${value}" == replace-with-* || "${value}" == *placeholder* || "${value}" == *change-this* ]]
+  [[ -z "${value}" || "${value}" == replace-with-* || "${value}" == *placeholder* || "${value}" == *change-this* || "${value}" == *your-server.example.com* ]]
 }
 
 append_unmanaged_env_lines() {
@@ -210,7 +234,9 @@ choose_public_url() {
   if [[ -n "${current_public_url}" ]]; then
     echo >&2
     echo "現在の Public URL: ${current_public_url}" >&2
-    if confirm_yes_no "この Public URL をそのまま使いますか？ [Y/n]:" "Y"; then
+    if is_localhost_url "${current_public_url}"; then
+      echo "現在の Public URL は localhost 系のため使用できません。外部から到達できる URL を選び直してください。" >&2
+    elif confirm_yes_no "この Public URL をそのまま使いますか？ [Y/n]:" "Y"; then
       echo "${current_public_url%/}"
       return 0
     fi
@@ -218,24 +244,17 @@ choose_public_url() {
 
   echo >&2
   echo "公開方法を選んでください。" >&2
-  echo "  1) ローカルだけで試す" >&2
-  echo "  2) Cloudflare Tunnel で簡単公開" >&2
-  echo "  3) Nginx + ドメインで本番公開" >&2
-  echo "  4) Tailscale で仲間内だけ公開" >&2
-  echo "  5) Public URL を直接入力" >&2
+  echo "  1) Cloudflare Tunnel で簡単公開" >&2
+  echo "  2) Nginx + ドメインで本番公開" >&2
+  echo "  3) Tailscale で仲間内だけ公開" >&2
+  echo "  4) Public URL を直接入力" >&2
 
-  while [[ ! "${choice}" =~ ^[1-5]$ ]]; do
-    read -r -p "番号 [1-5]: " choice
+  while [[ ! "${choice}" =~ ^[1-4]$ ]]; do
+    read -r -p "番号 [1-4]: " choice
   done
 
   case "${choice}" in
     1)
-      public_url="http://localhost:${port}"
-      echo >&2
-      echo "注意: localhost は同じ PC でのテスト専用です。" >&2
-      echo "他人や catChat Hub から接続するには、外部から到達できる URL が必要です。" >&2
-      ;;
-    2)
       echo >&2
       if has_command cloudflared; then
         echo "cloudflared は見つかりました。別ターミナルで次を実行してください。" >&2
@@ -248,13 +267,9 @@ choose_public_url() {
       echo >&2
       echo "表示された https://xxxxx.trycloudflare.com を入力してください。" >&2
       echo "trycloudflare.com の URL は一時的です。本番では固定 Tunnel と独自ドメインを推奨します。" >&2
-      while true; do
-        public_url="$(prompt_required "Cloudflare Tunnel URL")"
-        validate_public_url "${public_url}" && break
-        echo "http:// または https:// で始まる URL を入力してください。" >&2
-      done
+      public_url="$(prompt_external_public_url "Cloudflare Tunnel URL")"
       ;;
-    3)
+    2)
       local domain=""
       echo >&2
       domain="$(prompt_required "ドメイン名 例: catchat.example.com")"
@@ -271,7 +286,7 @@ choose_public_url() {
       echo "  sudo nginx -t && sudo systemctl reload nginx" >&2
       echo "  sudo certbot --nginx -d ${domain}" >&2
       ;;
-    4)
+    3)
       local ts_ip=""
       echo >&2
       if has_command tailscale; then
@@ -287,21 +302,15 @@ choose_public_url() {
       echo "Tailscale は tailnet 内の仲間だけで使う用途に向いています。" >&2
       echo "tailnet 外のユーザーや通常の hub からは接続できない場合があります。" >&2
       ;;
-    5)
+    4)
       echo >&2
-      while true; do
-        public_url="$(prompt_required "Public URL")"
-        validate_public_url "${public_url}" && break
-        echo "http:// または https:// で始まる URL を入力してください。" >&2
-      done
-      if is_localhost_url "${public_url}"; then
-        echo >&2
-        echo "注意: localhost は同じ PC でのテスト専用です。" >&2
-        echo "他人や catChat Hub から接続するには、外部から到達できる URL が必要です。" >&2
-      fi
+      public_url="$(prompt_external_public_url "Public URL")"
       ;;
   esac
 
+  if is_localhost_url "${public_url}"; then
+    fail "Public URL に localhost / 127.0.0.1 / 0.0.0.0 は使えません。"
+  fi
   echo "${public_url%/}"
 }
 
@@ -439,6 +448,7 @@ print_invite_from_env() {
   registration_token="$(read_env_value CATCHAT_SERVER_REGISTRATION_TOKEN)"
 
   [[ -n "${public_url}" ]] || fail "CATCHAT_SERVER_PUBLIC_URL が .env にありません。"
+  ! is_localhost_url "${public_url}" || fail "CATCHAT_SERVER_PUBLIC_URL が localhost / 127.0.0.1 / 0.0.0.0 です。招待リンクは表示できません。外部から到達できる Public URL に変更して ./setup.sh を再実行してください。"
   [[ -n "${hub_url}" ]] || hub_url="https://chat.dongurihub.com"
   [[ -n "${invite_code}" ]] || fail "CATCHAT_INVITE_CODE が .env にありません。"
   [[ -n "${port}" ]] || port="8100"
@@ -446,12 +456,6 @@ print_invite_from_env() {
 
   echo "Local health URL: http://127.0.0.1:${port}/api/server/health"
   echo "Public URL: ${public_url%/}"
-  if is_localhost_url "${public_url}"; then
-    echo
-    echo "Warning: Public URL が localhost / 127.0.0.1 / 0.0.0.0 です。"
-    echo "この招待リンクは同じ PC でのテスト以外では使えません。"
-    echo "他人や catChat Hub から接続するには、外部から到達できる URL に変更してください。"
-  fi
   echo
 
   print_invite_details "${hub_url}" "${public_url}" "${server_name}" "${invite_code}" "${registration_token}" "false"
@@ -471,6 +475,10 @@ check_non_interactive_ready() {
     printf 'Error: --non-interactive に必要な値が不足または placeholder です:\n' >&2
     printf '  %s\n' "${missing[@]}" >&2
     exit 1
+  fi
+
+  if is_localhost_url "$(read_env_value CATCHAT_SERVER_PUBLIC_URL)"; then
+    fail "--non-interactive では CATCHAT_SERVER_PUBLIC_URL に localhost / 127.0.0.1 / 0.0.0.0 は使えません。"
   fi
 }
 
@@ -534,6 +542,9 @@ fi
 
 if [[ "${NON_INTERACTIVE}" == true ]]; then
   public_url="${existing_public_url%/}"
+  if is_localhost_url "${public_url}"; then
+    fail "CATCHAT_SERVER_PUBLIC_URL に localhost / 127.0.0.1 / 0.0.0.0 は使えません。"
+  fi
 else
   public_url="$(choose_public_url "${port}" "${existing_public_url}")"
 fi
@@ -598,7 +609,4 @@ health_check "${port}"
 
 registration_token="$(read_env_value CATCHAT_SERVER_REGISTRATION_TOKEN)"
 print_invite_details "${hub_url}" "${public_url}" "${server_name}" "${invite_code}" "${registration_token}" "true"
-if is_localhost_url "${public_url}"; then
-  echo "- Public URL が localhost です。同じ PC 以外からは接続できません。"
-fi
 echo "- 困った時は docs/troubleshooting.md を確認してください。"

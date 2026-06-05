@@ -60,7 +60,7 @@ docker-compose version
 ./setup.sh --print-invite
 ```
 
-Public URL が `localhost`、`127.0.0.1`、`0.0.0.0` の場合は警告が出ます。その招待リンクは同じ PC でのテスト以外では使えません。
+Public URL が `localhost`、`127.0.0.1`、`0.0.0.0` の場合はエラーになります。Cloudflare Tunnel、Nginx + HTTPS、Tailscale、または外部から到達できる URL を指定してください。
 
 ## CATCHAT_SERVER_SECRET must be configured
 
@@ -92,7 +92,7 @@ docker compose up -d --build
 
 ## invite URL が localhost になる / 共通招待リンク (join_url) が表示されない
 
-`.env` の `CATCHAT_SERVER_PUBLIC_URL` が `http://localhost:8100` のままになっているか、もしくは `CATCHAT_SERVER_REGISTRATION_TOKEN`（登録トークン）が空のままになっています。
+`.env` の `CATCHAT_SERVER_PUBLIC_URL` が外部から到達できない URL になっているか、もしくは `CATCHAT_SERVER_REGISTRATION_TOKEN`（登録トークン）が空のままになっています。
 これらが適切に設定されていないと、Hub への登録処理が自動的にスキップされ、共通招待リンク (join_url) が生成されません。
 登録トークンが未入力の場合でもセットアップ自体は続行され、互換用の `/add-server?invite=...` リンクが表示されます。
 
@@ -109,7 +109,7 @@ docker compose restart
 ./setup.sh invite
 ```
 
-`localhost` は同じ PC でのテスト専用です。他人や catChat Hub から共通招待リンクを使って接続するには、Cloudflare Tunnel や Nginx などを設定し、外部から到達できる Public URL を指定する必要があります。詳細は [共通招待リンクについて](common-invite-domain.md) を確認してください。
+Public URL に `localhost`、`127.0.0.1`、`0.0.0.0` は使えません。他人や catChat Hub から共通招待リンクを使って接続するには、Cloudflare Tunnel や Nginx などを設定し、外部から到達できる Public URL を指定する必要があります。詳細は [共通招待リンクについて](common-invite-domain.md) を確認してください。
 
 ## Cloudflare Tunnel URL が変わった
 
@@ -150,7 +150,7 @@ ss -ltnp | grep 8100
 
 ```env
 CATCHAT_PORT=18100
-CATCHAT_SERVER_PUBLIC_URL=http://localhost:18100
+CATCHAT_SERVER_PUBLIC_URL=https://your-server.example.com
 ```
 
 Nginx を使う場合は `proxy_pass` も同じポートに変えてください。

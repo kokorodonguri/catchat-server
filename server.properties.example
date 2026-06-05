@@ -15,7 +15,7 @@ server-description=A self-hosted catChat community server
 
 # Public URL where the hub backend can reach this server.
 # Use HTTPS in production.
-public-url=http://localhost:8100
+public-url=https://your-server.example.com
 
 # Hub URL used only for the startup add-server link.
 hub-url=https://chat.dongurihub.com

@@ -39,13 +39,12 @@ cd catchat-server
 
 | 方法 | 向いている用途 |
 | --- | --- |
-| ローカル | 同じ PC での動作確認 |
 | Cloudflare Tunnel | ポート開放なしで試す、簡単に HTTPS 公開する |
 | Nginx + ドメイン | VPS で本番運用する |
 | Tailscale | 仲間内、tailnet 内だけで使う |
 | 直接入力 | 既に Public URL がある |
 
-`localhost` は同じ PC からしか届きません。他人や catChat Hub から接続するには外部 URL が必要です。
+Public URL に `localhost`、`127.0.0.1`、`0.0.0.0` は使えません。catChat Hub から接続するには Cloudflare Tunnel、Nginx + HTTPS、Tailscale、または外部から到達できる URL が必要です。
 
 ## 4. Add to catChat Hub
 
@@ -62,7 +61,7 @@ https://chat.dongurihub.com/add-server?invite=...
 ```
 
 これらの招待リンクには `CATCHAT_SERVER_SECRET` は含まれません。
-※ localhost などのローカル環境では共通招待リンクは機能しないため、互換用リンクのみが生成されます。詳細は [共通招待リンクについて](common-invite-domain.md) を確認してください。
+※ localhost などのローカル Public URL は保存できません。詳細は [共通招待リンクについて](common-invite-domain.md) を確認してください。
 
 ## 5. Daily commands
 
