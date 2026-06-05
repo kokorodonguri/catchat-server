@@ -97,6 +97,23 @@ is_localhost_url() {
   [[ "$1" =~ ^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|/|$) ]]
 }
 
+public_url_host() {
+  local value="${1,,}"
+  local host
+  value="${value#http://}"
+  value="${value#https://}"
+  host="${value%%/*}"
+  host="${host#*@}"
+  host="${host%%:*}"
+  echo "${host}"
+}
+
+is_placeholder_public_url() {
+  local host
+  host="$(public_url_host "$1")"
+  [[ -z "${host}" || "${host}" == "example.com" || "${host}" == *.example.com || "${host}" == your-* || "${host}" == your.* || "${host}" == *placeholder* ]]
+}
+
 validate_public_url() {
   local value="$1"
   [[ "${value}" =~ ^https?://[^[:space:]]+$ ]]
@@ -104,7 +121,7 @@ validate_public_url() {
 
 validate_external_public_url() {
   local value="$1"
-  validate_public_url "${value}" && ! is_localhost_url "${value}"
+  validate_public_url "${value}" && ! is_localhost_url "${value}" && ! is_placeholder_public_url "${value}"
 }
 
 prompt_external_public_url() {
@@ -119,6 +136,11 @@ prompt_external_public_url() {
     if is_localhost_url "${value}"; then
       echo "Public URL に localhost / 127.0.0.1 / 0.0.0.0 は使えません。" >&2
       echo "Cloudflare Tunnel、Nginx + HTTPS、Tailscale、または外部から到達できる URL を指定してください。" >&2
+      continue
+    fi
+    if is_placeholder_public_url "${value}"; then
+      echo "Public URL に example.com や your-* などの placeholder URL は使えません。" >&2
+      echo "Cloudflare Tunnel、Nginx + HTTPS、Tailscale、または実在する外部公開 URL を指定してください。" >&2
       continue
     fi
     echo "${value%/}"
@@ -236,6 +258,8 @@ choose_public_url() {
     echo "現在の Public URL: ${current_public_url}" >&2
     if is_localhost_url "${current_public_url}"; then
       echo "現在の Public URL は localhost 系のため使用できません。外部から到達できる URL を選び直してください。" >&2
+    elif is_placeholder_public_url "${current_public_url}"; then
+      echo "現在の Public URL は placeholder のため使用できません。実在する外部公開 URL を選び直してください。" >&2
     elif confirm_yes_no "この Public URL をそのまま使いますか？ [Y/n]:" "Y"; then
       echo "${current_public_url%/}"
       return 0
@@ -272,7 +296,7 @@ choose_public_url() {
     2)
       local domain=""
       echo >&2
-      domain="$(prompt_required "ドメイン名 例: catchat.example.com")"
+      domain="$(prompt_required "ドメイン名 例: chat.my-domain.com")"
       domain="${domain#http://}"
       domain="${domain#https://}"
       domain="${domain%%/*}"
@@ -310,6 +334,9 @@ choose_public_url() {
 
   if is_localhost_url "${public_url}"; then
     fail "Public URL に localhost / 127.0.0.1 / 0.0.0.0 は使えません。"
+  fi
+  if is_placeholder_public_url "${public_url}"; then
+    fail "Public URL に example.com や your-* などの placeholder URL は使えません。"
   fi
   echo "${public_url%/}"
 }
@@ -449,6 +476,7 @@ print_invite_from_env() {
 
   [[ -n "${public_url}" ]] || fail "CATCHAT_SERVER_PUBLIC_URL が .env にありません。"
   ! is_localhost_url "${public_url}" || fail "CATCHAT_SERVER_PUBLIC_URL が localhost / 127.0.0.1 / 0.0.0.0 です。招待リンクは表示できません。外部から到達できる Public URL に変更して ./setup.sh を再実行してください。"
+  ! is_placeholder_public_url "${public_url}" || fail "CATCHAT_SERVER_PUBLIC_URL が placeholder URL です。招待リンクは表示できません。Cloudflare Tunnel、Nginx + HTTPS、Tailscale、または実在する外部公開 URL に変更して ./setup.sh を再実行してください。"
   [[ -n "${hub_url}" ]] || hub_url="https://chat.dongurihub.com"
   [[ -n "${invite_code}" ]] || fail "CATCHAT_INVITE_CODE が .env にありません。"
   [[ -n "${port}" ]] || port="8100"
@@ -479,6 +507,9 @@ check_non_interactive_ready() {
 
   if is_localhost_url "$(read_env_value CATCHAT_SERVER_PUBLIC_URL)"; then
     fail "--non-interactive では CATCHAT_SERVER_PUBLIC_URL に localhost / 127.0.0.1 / 0.0.0.0 は使えません。"
+  fi
+  if is_placeholder_public_url "$(read_env_value CATCHAT_SERVER_PUBLIC_URL)"; then
+    fail "--non-interactive では CATCHAT_SERVER_PUBLIC_URL に placeholder URL は使えません。"
   fi
 }
 
@@ -544,6 +575,9 @@ if [[ "${NON_INTERACTIVE}" == true ]]; then
   public_url="${existing_public_url%/}"
   if is_localhost_url "${public_url}"; then
     fail "CATCHAT_SERVER_PUBLIC_URL に localhost / 127.0.0.1 / 0.0.0.0 は使えません。"
+  fi
+  if is_placeholder_public_url "${public_url}"; then
+    fail "CATCHAT_SERVER_PUBLIC_URL に placeholder URL は使えません。"
   fi
 else
   public_url="$(choose_public_url "${port}" "${existing_public_url}")"

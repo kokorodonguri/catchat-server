@@ -23,14 +23,14 @@ https://xxxxx.trycloudflare.com
 本番に近い形で使う場合は Cloudflare Zero Trust で Tunnel を作り、Public Hostname を設定します。
 
 ```text
-Hostname: catchat.example.com
+Hostname: chat.my-domain.com
 Service: http://localhost:8100
 ```
 
 その場合の `.env`:
 
 ```env
-CATCHAT_SERVER_PUBLIC_URL=https://catchat.example.com
+CATCHAT_SERVER_PUBLIC_URL=https://chat.my-domain.com
 CATCHAT_PORT=8100
 ```
 
@@ -44,7 +44,7 @@ docker compose restart
 
 ```bash
 curl http://127.0.0.1:8100/api/server/health
-curl https://catchat.example.com/api/server/health
+curl https://chat.my-domain.com/api/server/health
 docker compose logs --tail=100 catchat-server
 ```
 

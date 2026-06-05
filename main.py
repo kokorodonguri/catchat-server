@@ -213,6 +213,18 @@ def is_placeholder_secret(value: str) -> bool:
     )
 
 
+def is_placeholder_public_url(value: str) -> bool:
+    hostname = (urlparse(value).hostname or "").lower()
+    return (
+        not hostname
+        or hostname == "example.com"
+        or hostname.endswith(".example.com")
+        or hostname.startswith("your-")
+        or hostname.startswith("your.")
+        or "placeholder" in hostname
+    )
+
+
 if is_placeholder_secret(SERVER_SECRET):
     raise RuntimeError("CATCHAT_SERVER_SECRET must be configured in catchat-server/.env (legacy CATCHAT_GUILD_SECRET is also supported)")
 if REGISTRATION_TOKEN and is_placeholder_secret(REGISTRATION_TOKEN):
@@ -227,6 +239,10 @@ if (
     or parsed_public_url.fragment
 ):
     raise RuntimeError("CATCHAT_PUBLIC_URL must be a public HTTP(S) URL without credentials, query, or fragment")
+if parsed_public_url.hostname in {"localhost", "127.0.0.1", "0.0.0.0"}:
+    raise RuntimeError("CATCHAT_PUBLIC_URL must not be localhost, 127.0.0.1, or 0.0.0.0")
+if is_placeholder_public_url(PUBLIC_URL):
+    raise RuntimeError("CATCHAT_PUBLIC_URL must not be an example.com or placeholder URL")
 
 
 class ServerSettingsResponse(BaseModel):

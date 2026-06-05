@@ -99,7 +99,7 @@ docker compose up -d --build
 設定を修正する場合:
 
 1. `.env` を開き、必要に応じて以下を設定します。
-   - `CATCHAT_SERVER_PUBLIC_URL` に外部公開用の正しいURL（例: `https://catchat.example.com`）を指定
+   - `CATCHAT_SERVER_PUBLIC_URL` に外部公開用の正しいURL（例: `https://chat.my-domain.com`）を指定
    - `CATCHAT_SERVER_REGISTRATION_TOKEN` に Hub 側で定義された登録トークンを指定
 
 2. 変更後、再起動および再登録を行います:
@@ -150,7 +150,7 @@ ss -ltnp | grep 8100
 
 ```env
 CATCHAT_PORT=18100
-CATCHAT_SERVER_PUBLIC_URL=https://your-server.example.com
+CATCHAT_SERVER_PUBLIC_URL=https://chat.my-domain.com
 ```
 
 Nginx を使う場合は `proxy_pass` も同じポートに変えてください。

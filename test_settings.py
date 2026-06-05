@@ -24,6 +24,7 @@ atexit.register(cleanup_test_files)
 os.environ["CATCHAT_SERVER_DATABASE_PATH"] = "test_guild.db"
 os.environ["CATCHAT_SERVER_UPLOAD_DIR"] = "test_uploads"
 os.environ["CATCHAT_SERVER_SECRET"] = "test-secret-key-12345"
+os.environ["CATCHAT_SERVER_PUBLIC_URL"] = "https://test-server.localdomain.test"
 
 import main  # noqa: E402
 
