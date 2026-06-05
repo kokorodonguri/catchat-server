@@ -1,0 +1,31 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# runtime data
+data/
+uploads/
+*.db
+*.sqlite
+*.sqlite3
+
+# logs / debug
+*.log
+.playwright-mcp/
+playwright-report/
+test-results/
+blob-report/
+
+# dependencies / cache
+node_modules/
+node_modules.bak/
+venv/
+.venv/
+__pycache__/
+*.pyc
+.cache/
+
+# OS
+.DS_Store
+Thumbs.db

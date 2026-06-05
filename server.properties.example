@@ -1,0 +1,70 @@
+# catChat Server properties example
+# Copy to server.properties or run ./setup.sh to create it automatically.
+#
+# Priority:
+# 1. .env CATCHAT_SERVER_* values
+# 2. server.properties
+# 3. built-in defaults
+#
+# Keep secrets in .env. Do not put CATCHAT_SERVER_SECRET, OAuth secrets,
+# JWT secrets, hub secrets, or registration tokens in this file.
+
+# Basic identity shown in catChat Hub.
+server-name=My catChat Server
+server-description=A self-hosted catChat community server
+
+# Public URL where the hub backend can reach this server.
+# Use HTTPS in production.
+public-url=http://localhost:8100
+
+# Hub URL used only for the startup add-server link.
+hub-url=https://catchat.dongurihub.com
+
+# Persistent paths inside the Docker container.
+database-path=/app/data/server.db
+upload-dir=/app/uploads
+
+# Default text channel created on first boot.
+default-channel-name=general
+
+# Attachments.
+max-attachment-size-mb=50
+max-attachments-per-message=5
+allowed-file-types=image/*,video/*,audio/*,application/pdf,text/plain,application/zip
+allow-executable-files=false
+
+# Messages.
+max-message-length=4000
+max-message-history=100
+allow-message-edit=true
+allow-message-delete=true
+allow-replies=true
+allow-reactions=true
+
+# Channels and members.
+allow-channel-create=true
+max-channels=100
+max-members=0
+
+# Startup invite printed to Docker logs.
+startup-invite-code=
+default-invite-enabled=true
+default-invite-max-uses=0
+default-invite-expires-hours=0
+allow-users-create-invites=false
+
+# Access and CORS.
+allowed-origins=https://catchat.dongurihub.com
+require-hub-proxy=true
+allow-direct-browser-access=false
+
+# Incoming webhooks.
+enable-incoming-webhooks=true
+max-webhooks=20
+webhook-rate-limit-per-minute=30
+
+# Moderation and audit flags.
+enable-bans=true
+enable-kicks=true
+enable-reports=true
+enable-audit-log=true

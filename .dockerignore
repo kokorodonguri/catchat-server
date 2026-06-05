@@ -1,0 +1,93 @@
+# Environment variables (use env_file or --env-file in compose)
+.env
+.env.local
+.env.*.local
+server.properties
+
+# Data directories (should be mounted as volumes)
+data/
+uploads/
+/data
+/uploads
+secrets/
+/secrets
+
+# Database files (volatile, should be mounted)
+*.db
+*.db-wal
+*.db-shm
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# IDE and editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+!README.md
+
+# Logs
+*.log
+logs/
+
+# Node.js artifacts (if any)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Other
+.dockerignore
+Dockerfile
+docker-compose*.yml
+docker-compose*.yaml

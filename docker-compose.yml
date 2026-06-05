@@ -1,0 +1,25 @@
+services:
+  catchat-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: catchat-server
+    env_file:
+      - .env
+    ports:
+      - "${CATCHAT_PORT:-8100}:8100"
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/api/server/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
